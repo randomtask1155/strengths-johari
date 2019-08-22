@@ -208,11 +208,11 @@ func ParseServiceCred() (dbURL string) {
 	// only care about the first one found because we hard coded it with p-mysql in DBService struct
 	if len(MyService.SQLService) > 0 {
 		for i := range MyService.SQLService {
-			dbURL = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?parseTime=true",
+			dbURL = fmt.Sprintf("%s:%s@tcp(%s:%0.f)/%s?parseTime=true",
 				MyService.SQLService[i].Credentials.User,
 				MyService.SQLService[i].Credentials.Pass,
 				MyService.SQLService[i].Credentials.Hostname,
-				MyService.SQLService[i].Credentials.Port.(int),
+				MyService.SQLService[i].Credentials.Port.(float64),
 				MyService.SQLService[i].Credentials.Database)
 			break
 		}

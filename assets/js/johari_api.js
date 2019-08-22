@@ -510,12 +510,29 @@ function loginUser() {
     "password": btoa($('#userpasswordField').val())
   };
 
+  var originalPath = "";
+  var query = location.search.substr(1);
+  var result = {};
+  query.split("&").forEach(function(part) {
+    var item = part.split("=");
+    result[item[0]] = decodeURIComponent(item[1]);
+  });
+  if ( result.hasOwnProperty("state") ) {
+    console.log("state field set " + result["state"] );
+    originalPath = atob(result["state"]);
+  }
+
   $.ajax({
     url: LoginUserURL,
     type: 'POST',
     dataType: 'json',
     success: function (data) {
-      window.location.href = "/";
+        if ( originalPath == "" ) {
+          window.location.href = "/";
+        } else {
+          window.location.href = originalPath;
+        }
+        
     },
     error: function(data) {
       alert(data.responseJSON.errmessage);

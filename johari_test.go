@@ -38,6 +38,37 @@ func createUser(u string) {
 	}
 }
 
+func authenitcateUserWithPath(u, state string) (*http.Response, *http.Cookie) {
+	baseURL := "http://localhost:" + os.Getenv("PORT")
+	hc := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	var cookie *http.Cookie
+	req, err := http.NewRequest("POST", baseURL+"/login/submit?state="+state, bytes.NewBuffer([]byte(u)))
+	req.Header.Add("X-Forwarded-Proto", "https")
+	resp, err := hc.Do(req)
+	if err != nil {
+		Fail(err.Error())
+	}
+	if resp.StatusCode != 200 {
+		b, _ := ioutil.ReadAll(resp.Body)
+		Fail(fmt.Sprintf("Response status is not 302: %d : %s", resp.StatusCode, b))
+	}
+
+	for _, c := range resp.Cookies() {
+		if c.Name == SessionName {
+			cookie = c // save the cookie for future use
+		}
+	}
+
+	if cookie == nil {
+		Fail("Could not acquire auth cookie")
+	}
+	return resp, cookie
+}
+
 func authenitcateUser(u string) *http.Cookie {
 	baseURL := "http://localhost:" + os.Getenv("PORT")
 	hc := &http.Client{
@@ -150,6 +181,9 @@ var _ = Describe("API Handlers", func() {
 	var user1cookie *http.Cookie
 	var user2Cookie *http.Cookie
 	var user1PaneData = `{ "nickname": "test-sample12345", "words": ["Aware","Inquisitive","Self-motivated","Driven","Meticulous","Vivid","Artistic","Serious","Questioning","Impatient","Collaborative"]}`
+	var user1PaneDataWindow = `{ "nickname": "test-window-sample12345", "words": ["Aware","Inquisitive","Self-motivated","Driven","Meticulous","Vivid","Artistic","Serious","Questioning","Impatient","Collaborative"]}`
+	var user1PaneDataFeedback = `{ "nickname": "test-feedback-sample12345", "words": ["Aware","Inquisitive","Self-motivated","Driven","Meticulous","Vivid","Artistic","Serious","Questioning","Impatient","Collaborative"]}`
+
 	//var user1KnownField = "Aware"
 	// Authenticate and save cookie
 
@@ -184,6 +218,102 @@ var _ = Describe("API Handlers", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(resp.StatusCode).To(Equal(302))
 				Expect(resp.Header.Get("Set-Cookie")).ShouldNot(Equal(""))
+			})
+
+			It("/window redirects back if user is not logged in", func() {
+				var user1Pane string
+
+				By("/post?new=t creates a new window pane")
+				req, err := http.NewRequest("POST", baseURL+"/post?new=t", bytes.NewBuffer([]byte(user1PaneDataWindow)))
+				req.Header.Add("X-Forwarded-Proto", "https")
+				req.AddCookie(user1cookie)
+				Expect(err).ShouldNot(HaveOccurred())
+				resp, err := hc.Do(req)
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(201))
+				data := new(CreateWindowRes)
+				decoder := json.NewDecoder(resp.Body)
+				Expect(decoder.Decode(&data)).ShouldNot(HaveOccurred()) // no err expected
+				Expect(data.Pane).ShouldNot(BeEmpty())
+				user1Pane = data.Pane
+
+				By("/window?pane=ID redirects to login with state")
+				req, err = http.NewRequest("GET", baseURL+"/window?pane="+user1Pane, nil)
+				req.Header.Add("X-Forwarded-Proto", "https")
+				resp, err = hc.Do(req)
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(302))
+
+				location, err := resp.Location()
+				Expect(err).ShouldNot(HaveOccurred())
+
+				params := location.Query()
+				state := ""
+				for k := range params {
+					if k == "state" {
+						state = params[k][0]
+					}
+				}
+				Expect(state).NotTo(Equal(""))
+
+				// TODO FORM LOGIN SUBMISSION AND CHECK FOR REDIRECT
+
+				By("/window?pane=ID returns the users window pane")
+				req, err = http.NewRequest("GET", baseURL+"/window?pane="+user1Pane, nil)
+				req.Header.Add("X-Forwarded-Proto", "https")
+				req.AddCookie(user1cookie)
+				resp, err = hc.Do(req)
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+
+			})
+
+			It("/feedback redirects back if user is not logged in", func() {
+				var user1Pane string
+
+				By("/post?new=t creates a new window pane")
+				req, err := http.NewRequest("POST", baseURL+"/post?new=t", bytes.NewBuffer([]byte(user1PaneDataFeedback)))
+				req.Header.Add("X-Forwarded-Proto", "https")
+				req.AddCookie(user1cookie)
+				Expect(err).ShouldNot(HaveOccurred())
+				resp, err := hc.Do(req)
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(201))
+				data := new(CreateWindowRes)
+				decoder := json.NewDecoder(resp.Body)
+				Expect(decoder.Decode(&data)).ShouldNot(HaveOccurred()) // no err expected
+				Expect(data.Pane).ShouldNot(BeEmpty())
+				user1Pane = data.Pane
+
+				By("/feedback?pane=ID redirects to login with state")
+				req, err = http.NewRequest("GET", baseURL+"/feedback?pane="+user1Pane, nil)
+				req.Header.Add("X-Forwarded-Proto", "https")
+				resp, err = hc.Do(req)
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(302))
+
+				location, err := resp.Location()
+				Expect(err).ShouldNot(HaveOccurred())
+
+				params := location.Query()
+				state := ""
+				for k := range params {
+					if k == "state" {
+						state = params[k][0]
+					}
+				}
+				Expect(state).NotTo(Equal(""))
+
+				// TODO FORM LOGIN SUBMISSION AND CHECK FOR REDIRECT
+
+				By("/feedback?pane=ID returns the users window pane")
+				req, err = http.NewRequest("GET", baseURL+"/feedback?pane="+user1Pane, nil)
+				req.Header.Add("X-Forwarded-Proto", "https")
+				req.AddCookie(user2Cookie)
+				resp, err = hc.Do(req)
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+
 			})
 
 			It("creating and sharing window works", func() {

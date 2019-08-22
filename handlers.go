@@ -762,7 +762,7 @@ func SubmitFeedback(w http.ResponseWriter, r *http.Request, uid int) {
 
 func windowHandler(w http.ResponseWriter, r *http.Request) {
 	if !checkLogin(w, r, false) {
-		http.Redirect(w, r, "/login", http.StatusFound)
+		sendToLogin(w, r)
 		return
 	}
 
@@ -774,9 +774,7 @@ func windowHandler(w http.ResponseWriter, r *http.Request) {
 
 func feedbackHandler(w http.ResponseWriter, r *http.Request) {
 	if !checkLogin(w, r, false) {
-		vals := r.URL.Query()
-		pane := vals.Get("pane")
-		http.Redirect(w, r, baseURL+"?feedbackpane="+pane, http.StatusFound)
+		sendToLogin(w, r)
 		return
 	}
 	FeedbackPage.Execute(w, HTMLTemplateVars{getUserName(r), *EnableOauth, baseURL})
@@ -787,6 +785,22 @@ func thanksHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ThanksPage.Execute(w, HTMLTemplateVars{getUserName(r), *EnableOauth, baseURL})
+}
+
+func sendToLogin(w http.ResponseWriter, r *http.Request) {
+	params := r.URL.Query()
+	paramkeys := make([]string, 0)
+	for k := range params {
+		for i := range params[k] {
+			paramkeys = append(paramkeys, k+"="+params[k][i])
+		}
+	}
+
+	if len(paramkeys) > 0 {
+		http.Redirect(w, r, "/login?state="+base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s?%s", r.URL.Path, strings.Join(paramkeys, "&")))), http.StatusFound)
+	} else {
+		http.Redirect(w, r, "/login", http.StatusFound)
+	}
 }
 
 /*
